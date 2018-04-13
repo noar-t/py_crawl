@@ -20,16 +20,12 @@ def worker(q_in, s, lock):
 
         if depth == 0:
             continue
-        if url is None:
-            break
 
-        print('lock')
         lock.acquire()
         stale_url = url in s
         if not stale_url:
             s.add(url)
         lock.release()
-        print('unlock')
 
         if not stale_url:
             s.add(url)
@@ -47,7 +43,6 @@ def worker(q_in, s, lock):
 
             except Exception as e:
                 print('DEBUG exception in request')
-                #print('DEBUG exception in request' + e)
         else:
             print('DEBUG duplicate: ' + url)
 
@@ -104,7 +99,7 @@ def main():
 
     # signal all processes to stop and join them
     for i in range(workers):
-        print('joined: ' + i)
+        print('joined: ' + str(i))
         processes[i].join()
 
 if __name__ == '__main__':
