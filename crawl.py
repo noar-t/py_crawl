@@ -1,24 +1,32 @@
 import requests
 import urllib.parse
-#import queue
 import multiprocessing
 import sys
+import os
+import queue
 from bs4 import BeautifulSoup
 from bs4.element import Comment
 
-workers = 2
+workers = 6
 writers = 1
-depth = 2
+depth = 10
+HOME = os.environ['HOME']
 
 
 # simple skeleman to show how to get work from the queue
 def worker(q_in, s, lock):
-    print('worker')
+    #print('worker')
     # Do work while queue has stuff
     while True:
-        depth, url = q_in.get(timeout=5)
+        #print('loop start')
+        try:
+            depth, url = q_in.get(timeout=5)
+        except queue.Empty:
+            break
+
 
         if depth == 0:
+        #    print('max depth reached')
             continue
 
         lock.acquire()
@@ -26,25 +34,48 @@ def worker(q_in, s, lock):
         if not stale_url:
             s.add(url)
         lock.release()
+        #print('checked set')
 
         if not stale_url:
             s.add(url)
-            print(url)
+            #print(url)
             try:
-                page = requests.get(url)
+                #print('try')
+                page = requests.get(url, timeout=5)
+                #print('finished request')
                 if page.ok and 'text/html' in page.headers['content-type']:
                     soup = BeautifulSoup(page.content, 'html.parser')
-                    page_urls = get_urls(soup, url)
-                    [q_in.put((depth - 1, u)) for u in page_urls]
+                    #print('parsed')
+                    links = get_urls(soup, url)
+                    #print('got urls')
+                    [q_in.put((depth - 1, u)) for u in links]
+                    #print('put urls')
                     page_text = text_from_soup(soup)
+                    #print(url)
+                    #if len(url.split('//')) > 2:
+                    #    print('DEBUGDEBUGDEBUG')
+                    #print('stripped')
                     # TODO save page_urls to file
                     # TODO save text_from_soup
+                    write_files(url, page_text, links)
 
 
             except Exception as e:
-                print('DEBUG exception in request')
+                print('DEBUG exception in request') #+ str(e))
         else:
             print('DEBUG duplicate: ' + url)
+
+        #print('loop end\n')
+
+def write_files(url, page_text, links):
+    filename = url.split('//')[1].replace('/','%2f')
+   # try:
+    with open(HOME + '/crawl/body/' + filename, 'w+') as f:
+        f.write(page_text)
+    with open(HOME + '/crawl/links/' + filename, 'w+') as f:
+        [f.write(link + '\n') for link in links]
+    #except Exception:
+    #    print('DEBUG bad file/io')
 
 # Get urls in a page and return it as a list
 def get_urls(soup, parent_url):
@@ -76,6 +107,7 @@ def tag_visible(element):
 
 
 def main():
+    #os.makedirs(HOME + '/scrape/out')
     # Initialize synchronization data structures
     q_in = multiprocessing.Queue()
     #q_out = multiprocessing.JoinableQueue()
